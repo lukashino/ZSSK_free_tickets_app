@@ -7,30 +7,20 @@ using Flurl.Http;
 using HtmlAgilityPack;
 using System.Text.RegularExpressions;
 
+// TODO TODO TODO TODO
+// remove that "2" from identifier
+// Regex for detecting fast trains. Or should RR pass???
+
+
 namespace ZSSK_cheaper_tickets_cons
 {
-	public class Trains
+	public static class GlobalVar
 	{
-		List<Train> TrainsList = new List<Train>();
-		public string JSFViewState { get; set; }
-
-		public Trains()
-		{
-			JSFViewState = "";
-			TrainsList = null;
-		}
-	}
-
-	public class Train
-	{
-		public string ID { get; set; }
-		public string Name { get; set; }
-
-		public Train()
-		{
-			Name = "";
-			ID = "";
-		}
+		public const bool LOGS = true;
+		public const string FROM = "Bratislava hl.st.";
+		public const string TO = "Zvolen";
+		public const string TIME = "6:30";
+		public const string DATE = "26.1.2018";
 	}
 	class Program
 	{
@@ -38,7 +28,7 @@ namespace ZSSK_cheaper_tickets_cons
 		private static readonly HttpClient client = new HttpClient(handler);
 		static void Main(string[] args)
 		{
-			
+
 			RunAsync().Wait();
 			Console.ReadLine();
 		}
@@ -52,8 +42,27 @@ namespace ZSSK_cheaper_tickets_cons
 			return values;
 		}
 
-		static async Task<String> GetCart(string JSFViewState)
+		/*
+		 * Calling succesfull GetCart method can mean 2 things:
+		 * 1. There is free ticket/s available to buy (can be alternatively checked by separate function (yes do it))
+		 * 2. You can now remove it from your cart
+		 */
+		static async Task<String> GetCart(string page) // 
 		{
+			var htmlDoc2 = new HtmlDocument(); // remove that "2" from identifier
+			htmlDoc2.LoadHtml(page); // Loading up HTML
+
+			var isInCart = htmlDoc2.DocumentNode
+								.SelectNodes("//div[@class='tmp-shopping-cart-total']/h2[@class='tmp-shopping-header']"); // this node has to be part of the cart page
+
+			if (isInCart == null) // If it is not (== null) then end function 
+				return null;
+
+
+			var JSFViewState = htmlDoc2.DocumentNode
+								.SelectSingleNode("//input[@name='javax.faces.ViewState']")
+								.Attributes["value"].Value;
+
 			var values = await GetCartParams(JSFViewState);
 
 			var content = new FormUrlEncodedContent(values);
@@ -63,25 +72,48 @@ namespace ZSSK_cheaper_tickets_cons
 			return await response.Content.ReadAsStringAsync();
 		}
 
-		//static async void EmptyCart()
-		//{
-
-		//}
-
-		static async Task<String> GetZSSKInfo()
+		static async Task<Dictionary<string, string>> EmptyCartParams(string JFSViewState)
 		{
-			
-			//using (var client = new HttpClient())
-			//{
-				var values = new Dictionary<string, string> // getting list of available trains
+			var values = new Dictionary<string, string>();
+			values.Add("shoppingCart", "shoppingCart");
+			values.Add("javax.faces.ViewState", JFSViewState);
+			values.Add("shoppingCart:j_idt96:0:j_idt103", "shoppingCart:j_idt96:0:j_idt103");
+			return values;
+		}
+
+		/*
+		 * EmptyCart method should always after GetCart
+		 * Method is used for removing checked tickets.
+		 * Method DOES NOT empty the whole cart!
+		 */
+		static async Task<String> EmptyCart(string page)
+		{
+			var htmlDoc = new HtmlDocument();
+			htmlDoc.LoadHtml(page); // Loading up HTML
+
+			var JSFViewState = htmlDoc.DocumentNode
+								.SelectSingleNode("//input[@name='javax.faces.ViewState']")
+								.Attributes["value"].Value;
+
+			var values = await EmptyCartParams(JSFViewState);
+			var content = new FormUrlEncodedContent(values);
+			var response = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/shopping/shoppingCart.xhtml", content); // got the page
+			return await response.Content.ReadAsStringAsync();
+		}
+
+
+
+		static async Task<String> GetZSSKInfo(string from, string to, string date, string time)
+		{
+			var values = new Dictionary<string, string> // getting list of available trains
 				{
 					{ "lang", "sk" },
 					{ "portal", "" },
-					{ "from", "Bratislava hl.st." },
-					{ "to", "Margecany" },
+					{ "from", from },
+					{ "to", to },
 					{ "via", "" },
-					{ "date", "19.1.2018" },
-					{ "time", "6:30" },
+					{ "date", date },
+					{ "time", time },
 					{ "departure", "true" },
 					{ "wlw-checkbox_key%3A%7BpageFlow.inputParam.paramItemParams.direct.valueBoolean%7DOldValue", "false" },
 					{ "maxChangeTrainCount", "5" },
@@ -89,70 +121,23 @@ namespace ZSSK_cheaper_tickets_cons
 					{ "bed", "0" }
 				};
 
-				var content = new FormUrlEncodedContent(values);
+			var content = new FormUrlEncodedContent(values);
 
-				var response = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/connection/portal.xhtml", content); // got the page
-
-
-				return await response.Content.ReadAsStringAsync();
-			//}
+			var response = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/connection/portal.xhtml", content); // got the page
 
 
-
-			//var url = new Url("https://ikvc.slovakrail.sk/inet-sales-web/pages/connection/portal.xhtml");
-			//var values = new Dictionary<string, string>
-			//	{
-			//		{ "lang", "sk" },
-			//		{ "portal", "" },
-			//		{ "from", "Bratislava hl.st." },
-			//		{ "to", "Margecany" },
-			//		{ "via", "" },
-			//		{ "date", "6.12.2017" },
-			//		{ "time", "6:00" },
-			//		{ "departure", "true" },
-			//		{ "wlw-checkbox_key%3A%7BpageFlow.inputParam.paramItemParams.direct.valueBoolean%7DOldValue", "false" },
-			//		{ "maxChangeTrainCount", "5" },
-			//		{ "minChangeTrainTime", "2" },
-			//		{ "bed", "0" }
-			//	};
-			//var response = await url
-
-
-			//	//.WithHeaders(new {
-			//	//	Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-			//	//	Accept_Encoding = "gzip, deflate, br",
-			//	//	Accept_Language = "en-US,en; q=0.5",
-			//	//	User_Agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:57.0) Gecko/20100101 Firefox/57.0",
-			//	//	Referer = "http://www.slovakrail.sk/",
-			//	//	Upgrade_Insecure_Requests = "1",
-			//	//	Connection = "keep-alive",
-			//	//	Host = "ikvc.slovakrail.sk",
-			//	//	DNT ="1" })
-			//	//	.WithCookies(new {
-			//	//		WEBCOOKIE = "5RgpLmo2MTcNsYHUUNZOED63oDLYfXeADRthrA4RDd9biSeewSvg!1595625564",
-			//	//		IAMCOOKIE = "1XopLmzntsmlGngDENb6Nw3hoWTFTcrkBuj229A_0kTGPMJMWfrk!1362272383",
-			//	//		lang = "sk"}) 
-
-
-			//	.PostUrlEncodedAsync(values).ReceiveString();
-			//return response;
-
+			return await response.Content.ReadAsStringAsync();
 		}
 
-		static async Task<String> GetTrainInfo(Dictionary<string, string> values)
+		static async Task<String> GetTrainInfo(Dictionary<string, string> values) // fetching specific train page
 		{
+			var content = new FormUrlEncodedContent(values);
 
-			//using (var client = new HttpClient())
-			//{
-				var content = new FormUrlEncodedContent(values);
+			var trainResponse = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/connection/search.xhtml", content);
 
-				var trainResponse = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/connection/search.xhtml", content);
+			var trainPage = trainResponse.Content.ReadAsStringAsync();
 
-				var trainPage = trainResponse.Content.ReadAsStringAsync();
-
-				return await trainPage;
-			//}
-
+			return await trainPage;
 		}
 
 		static async Task<String> GetContigentCheckChangePage(Dictionary<string, string> values)
@@ -161,7 +146,9 @@ namespace ZSSK_cheaper_tickets_cons
 
 			var trainResponse = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/shopping/ticketVCD.xhtml", content);
 
-			return await trainResponse.Content.ReadAsStringAsync();
+			var trainPage = trainResponse.Content.ReadAsStringAsync();
+
+			return await trainPage;
 		}
 
 		static async Task<Dictionary<string, string>> GetContigentCheckParams(string trainPage)
@@ -178,18 +165,20 @@ namespace ZSSK_cheaper_tickets_cons
 				.SelectSingleNode("//select[@class='tmp-drl-passenger-type']")
 				.Attributes["id"].Value;
 
-			var changeParams = new Dictionary<string, string>();
-			changeParams.Add("ticketParam", "ticketParam");
-			changeParams.Add(ticketPassenger, "2");
-			changeParams.Add("javax.faces.ViewState", JSFViewState); // get it before values and do check for JSF again
-			changeParams.Add("javax.faces.source", ticketPassenger);
-			changeParams.Add("javax.faces.partial.event", "change");
-			changeParams.Add("javax.faces.partial.execute", ticketPassenger + " ticketParam:formWrap");
-			changeParams.Add("javax.faces.partial.render", "ticketParam:formWrap");
-			changeParams.Add("javax.faces.behavior.event", "change");
-			changeParams.Add("AJAX:EVENTS_COUNT", "1");
-			changeParams.Add("rfExt", "null");
-			changeParams.Add("javax.faces.partial.ajax", "true");
+			var changeParams = new Dictionary<string, string>()
+			{
+				{"ticketParam", "ticketParam" },
+				{ticketPassenger, "2" },
+				{"javax.faces.ViewState", JSFViewState },
+				{"javax.faces.source", ticketPassenger },
+				{"javax.faces.partial.event", "change" },
+				{"javax.faces.partial.execute", ticketPassenger + " ticketParam:formWrap" },
+				{"javax.faces.partial.render", "ticketParam:formWrap" },
+				{"javax.faces.behavior.event", "change" },
+				{"AJAX:EVENTS_COUNT", "1" },
+				{"rfExt", "null" },
+				{"javax.faces.partial.ajax", "true" }
+			};
 
 			var page = await GetContigentCheckChangePage(changeParams); // should internally change type of passenger to student (for free)
 			htmlDoc.LoadHtml(page);
@@ -205,26 +194,30 @@ namespace ZSSK_cheaper_tickets_cons
 
 			var ticketParam = "ticketParam:j_idt637"; // this is duplicated in param in request
 
-			Dictionary<string, string> values = new Dictionary<string, string>();
-			values.Add("ticketParam", "ticketParam");
-			values.Add(ticketPassenger, "2");
-			values.Add("ticketParam:passenger:0:contingentCheck", "on");
-			values.Add("javax.faces.ViewState", JSFViewState);
-			values.Add(ticketParam, ticketParam);
+			Dictionary<string, string> values = new Dictionary<string, string>()
+			{
+				{ "ticketParam", "ticketParam"},
+				{ ticketPassenger, "2"},
+				{ "ticketParam:passenger:0:contingentCheck", "on"},
+				{ "javax.faces.ViewState", JSFViewState},
+				{ ticketParam, ticketParam}
+			};
 
 			return values;
 		}
 
 		static async Task<String> GetContigentCheck(Dictionary<string, string> values)
 		{
-			
-			
+
+
 
 			var content = new FormUrlEncodedContent(values);
 
 			var trainResponse = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/shopping/ticketVCD.xhtml", content);
 
-			return await trainResponse.Content.ReadAsStringAsync();
+			var trainPage = trainResponse.Content.ReadAsStringAsync();
+
+			return await trainPage;
 		}
 
 
@@ -232,18 +225,22 @@ namespace ZSSK_cheaper_tickets_cons
 
 		static async Task RunAsync()
 		{
-			//var hostName = "https://www.bazos.sk/";
-			//var _pageCode = await GetPageCode(hostName);
-			//Console.WriteLine(_pageCode);
-			var response = await GetZSSKInfo();
+			await GetStations(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
+			var response = await GetZSSKInfo(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
 
 			var htmlDoc = new HtmlDocument();
 			htmlDoc.LoadHtml(response);
 
-			Trains trains = new Trains();
-			trains.JSFViewState = htmlDoc.DocumentNode
+			if (GlobalVar.LOGS)
+			{
+				System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetZSSKInfo.html"), response);
+			}
+
+			var JSFViewState = htmlDoc.DocumentNode
 				.SelectSingleNode("//input[@name='javax.faces.ViewState']")
 				.Attributes["value"].Value;
+
+			Trains trains = new Trains(JSFViewState);
 
 			var trainsNodes = htmlDoc.DocumentNode
 				.SelectNodes("//tr[@class='tmp-item-line ']/td[@class='tmp-valign-top' and @colspan='3']");
@@ -257,16 +254,16 @@ namespace ZSSK_cheaper_tickets_cons
 			foreach (var node in trainsNodes)
 			{
 				Train train = new Train();
-				train.Name = node.InnerText;
-				train.Name = Regex.Replace(train.Name, @"\s+", " ");
+				train.Name = node.InnerText; // get the train name
+				train.Name = Regex.Replace(train.Name, @"\s+", " "); // exclude spaces from train name
 
 				if (!Regex.IsMatch(train.Name, @"R .*")) // Checks if train is a fast train
 					continue;
 
 
-				var trainNodes = node.ParentNode.SelectSingleNode("./td[3]/div").ChildNodes; // Getting all possible a href links (Like Listok a miestenka, Miestenka, Listok)
+				var trainNodes = node.ParentNode.SelectSingleNode("./td[3]/div").ChildNodes; // Getting all possible *a* href links (Like Listok a miestenka, Miestenka, Listok)
 				HtmlNode trainNode = null;
-				foreach (var nodeTrain in trainNodes) // getting last a element in train nodes (Get the attribute value for "Listok")
+				foreach (var nodeTrain in trainNodes) // getting the last *a* element in train nodes (Get the attribute value for "Listok")    
 				{
 					if (nodeTrain.Name == "a" && nodeTrain.InnerText == "Lístok")
 					{
@@ -281,39 +278,160 @@ namespace ZSSK_cheaper_tickets_cons
 				var values = new Dictionary<string, string> // getting list of available trains
 				{
 					{ "searchForm", "searchForm" },
+					{ "javax.faces.ViewState", trains.JSFViewState }, // THIS IS ALTERED! TEST TEST
+					{ train.ID, train.ID }
 				};
 
-				values.Add("javax.faces.ViewState", trains.JSFViewState);
-				values.Add(train.ID, train.ID);
 
-
-				Console.WriteLine("Params of train: {0} with id: {1} is:", train.Name, train.ID);
-				foreach (KeyValuePair<string, string> list in values)
+				if (GlobalVar.LOGS)
 				{
-					Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
+					Console.WriteLine("Params of train: {0} with id: {1} is:", train.Name, train.ID);
+					foreach (KeyValuePair<string, string> list in values)
+					{
+						Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
+					}
 				}
+
 
 				Dictionary<string, string> str = await GetContigentCheckParams(await GetTrainInfo(values)); // setting params for contigent page
 
-				foreach (KeyValuePair<string, string> list in str)
+				if (GlobalVar.LOGS)
 				{
-					Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
+					foreach (KeyValuePair<string, string> list in str)
+					{
+						Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
+					}
+					Console.WriteLine("");
 				}
-				Console.WriteLine("");
-				response = await GetContigentCheck(str); // Checking whether there are free tickets or not
-				var htmlDoc2 = new HtmlDocument();
-				htmlDoc2.LoadHtml(response); // Loading up HTML
-				//var JSFViewState = htmlDoc.DocumentNode
-				//.SelectSingleNode("//input[@name='javax.faces.ViewState']")
-				//.Attributes["value"].Value;
 
-				//response = await GetCart(JSFViewState);
+				response = await GetContigentCheck(str); // Checking whether there are free tickets or not
+
+				if (GlobalVar.LOGS)
+				{
+					System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetContigentCheckTrain{0}.html", i), response);
+				}
+				response = await GetCart(response);
+
+				if (response == null)
+				{
+					Console.WriteLine("Train tickets are not available for train {0}", train.Name);
+					continue;
+				}
+				else
+				{
+					if (GlobalVar.LOGS)
+					{
+						System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetCartTrain{0}.html", i), response);
+					}
+					Console.WriteLine("Train tickets are available for train {0}", train.Name);
+				}
+
+				response = await EmptyCart(response);
+				if (GlobalVar.LOGS)
+				{
+					System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\EmptyCartTrain{0}.html", i), response);
+				}
 
 				System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\Train{0}.html", i), response);// 
+				i++;
 
-				i++; // GETCART IS NOT WORKING!!!!!!!
+			}
+			Console.WriteLine("END");
+		}
+
+		static async Task<List<string>> GetStations(string from, string to, string date, string time)
+		{
+			var response = await GetZSSKInfo(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
+
+			var htmlDoc = new HtmlDocument();
+			htmlDoc.LoadHtml(response);
+
+			//trains.
+			var JSFViewState = htmlDoc.DocumentNode
+				.SelectSingleNode("//input[@name='javax.faces.ViewState']")
+				.Attributes["value"].Value;
+
+			//Trains trains = new Trains(JSFViewState);
+
+			//var trainsNodes = htmlDoc.DocumentNode
+			//	.SelectNodes("//tr[@class='tmp-item-line ']/td[@class='tmp-valign-top' and @colspan='3']");
+			//if (trainsNodes == null)
+			//{
+			//	throw new NullReferenceException("No trains were fetched.");
+			//}
+
+			//int i = 0;
+			//string patternForID = @"searchForm:inetConnection.*?:.*?:.*?'";
+			//foreach (var node in trainsNodes)
+			//{
+			//	Train train = new Train();
+
+			//	train.Name = node.InnerText; // get the train name
+			//	train.Name = Regex.Replace(train.Name, @"\s+", " "); // exclude spaces from train name
+
+			//	if (!Regex.IsMatch(train.Name, @"R .*")) // Checks if train is a fast train
+			//		continue;
+
+
+			//	var trainNodes = node.ParentNode.SelectSingleNode("./td[3]/div").ChildNodes; // Getting all possible *a* href links (Like Listok a miestenka, Miestenka, Listok)
+			//	HtmlNode trainNode = null;
+			//	foreach (var nodeTrain in trainNodes) // getting the last *a* element in train nodes (Get the attribute value for "Listok")    
+			//	{
+			//		if (nodeTrain.Name == "a" && nodeTrain.InnerText == "Lístok")
+			//		{
+			//			trainNode = nodeTrain;
+			//		}
+			//	}
+
+
+			//	train.ID = Regex.Match(trainNode.Attributes["onclick"].Value, patternForID).Value;
+			//	train.ID = train.ID.Remove(train.ID.Length - 1);
+
+				
+			//}
+
+			var nodes = htmlDoc.DocumentNode.SelectNodes("//*[@id='r0_train_R615']/table");
+			Train train = new Train();
+
+			foreach (var node in nodes)
+			{
+				var stationNodes = node.SelectNodes("./tbody");
+				for (int i = 0; i < stationNodes.Count; i = i + 3)
+				{
+					string departureTime = stationNodes[i].SelectSingleNode("./tr[2]/td[4]/strong").InnerText;
+					string name = stationNodes[i].SelectSingleNode("./tr[2]/td[2]").InnerText;
+					departureTime = Regex.Replace(departureTime, @"\s+", "");
+					Station station = new Station(name, departureTime);
+
+					train.AddStation(station);
+
+					var otherStations = stationNodes[i + 1].SelectNodes("./tr");
+					for (int j = 0; j < otherStations.Count; j++)
+					{
+						name = otherStations[j].SelectSingleNode("./td[2]").InnerText;
+						departureTime = otherStations[j].SelectSingleNode("./td[4]/strong[2]").InnerText;
+						departureTime = Regex.Replace(departureTime, @"\s+", "");
+						station = new Station(name, departureTime);
+						train.AddStation(station);
+					}
+
+					if (i + 3 == stationNodes.Count)
+					{
+						name = stationNodes[i + 2].SelectSingleNode("./tr[1]/td[2]").InnerText;
+						departureTime = stationNodes[i + 2].SelectSingleNode("./tr[1]/td[4]/strong").InnerText;
+						departureTime = Regex.Replace(departureTime, @"\s+", "");
+						station = new Station(name, departureTime);
+
+						train.AddStation(station);
+					}
+					
+
+
+				}
+				var stations = train.Stations;
 			}
 
+			return new List<string>();
 		}
 	}
 }
