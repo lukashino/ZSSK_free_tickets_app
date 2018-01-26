@@ -18,10 +18,11 @@ namespace ZSSK_cheaper_tickets_cons
 	{
 		public const bool LOGS = true;
 		public const string FROM = "Bratislava hl.st.";
-		public const string TO = "Zvolen";
+		public const string TO = "Margecany";
 		public const string TIME = "6:30";
 		public const string DATE = "26.1.2018";
 	}
+
 	class Program
 	{
 		private static readonly HttpClientHandler handler = new HttpClientHandler();
@@ -208,9 +209,6 @@ namespace ZSSK_cheaper_tickets_cons
 
 		static async Task<String> GetContigentCheck(Dictionary<string, string> values)
 		{
-
-
-
 			var content = new FormUrlEncodedContent(values);
 
 			var trainResponse = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/shopping/ticketVCD.xhtml", content);
@@ -225,133 +223,35 @@ namespace ZSSK_cheaper_tickets_cons
 
 		static async Task RunAsync()
 		{
-			await GetStations(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
-			var response = await GetZSSKInfo(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
+			Trains trains = await GetStations(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
 
-			var htmlDoc = new HtmlDocument();
-			htmlDoc.LoadHtml(response);
 
-			if (GlobalVar.LOGS)
+
+
+			foreach (var train in trains.GetTrains())
 			{
-				System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetZSSKInfo.html"), response);
+				for (var i = 0; i < train.Stations.Count - 1; i++)
+				{
+					
+					var valueLol = await ContigentCheckPassage(train.Stations[i].Name, train.Stations[i + 1].Name,
+						GlobalVar.DATE, train.Stations[i].DepartureTime, trains.JSFViewState, train.ID);
+				}
 			}
+			//var response = await GetZSSKInfo(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
 
-			var JSFViewState = htmlDoc.DocumentNode
-				.SelectSingleNode("//input[@name='javax.faces.ViewState']")
-				.Attributes["value"].Value;
+			//var htmlDoc = new HtmlDocument();
+			//htmlDoc.LoadHtml(response);
 
-			Trains trains = new Trains(JSFViewState);
+			//if (GlobalVar.LOGS)
+			//{
+			//	System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetZSSKInfo.html"), response);
+			//}
 
-			var trainsNodes = htmlDoc.DocumentNode
-				.SelectNodes("//tr[@class='tmp-item-line ']/td[@class='tmp-valign-top' and @colspan='3']");
-			if (trainsNodes == null)
-			{
-				throw new NullReferenceException("No trains were fetched.");
-			}
+			//var JSFViewState = htmlDoc.DocumentNode
+			//	.SelectSingleNode("//input[@name='javax.faces.ViewState']")
+			//	.Attributes["value"].Value;
 
-			int i = 0;
-			string patternForID = @"searchForm:inetConnection.*?:.*?:.*?'";
-			foreach (var node in trainsNodes)
-			{
-				Train train = new Train();
-				train.Name = node.InnerText; // get the train name
-				train.Name = Regex.Replace(train.Name, @"\s+", " "); // exclude spaces from train name
-
-				if (!Regex.IsMatch(train.Name, @"R .*")) // Checks if train is a fast train
-					continue;
-
-
-				var trainNodes = node.ParentNode.SelectSingleNode("./td[3]/div").ChildNodes; // Getting all possible *a* href links (Like Listok a miestenka, Miestenka, Listok)
-				HtmlNode trainNode = null;
-				foreach (var nodeTrain in trainNodes) // getting the last *a* element in train nodes (Get the attribute value for "Listok")    
-				{
-					if (nodeTrain.Name == "a" && nodeTrain.InnerText == "Lístok")
-					{
-						trainNode = nodeTrain;
-					}
-				}
-
-
-				train.ID = Regex.Match(trainNode.Attributes["onclick"].Value, patternForID).Value;
-				train.ID = train.ID.Remove(train.ID.Length - 1);
-
-				var values = new Dictionary<string, string> // getting list of available trains
-				{
-					{ "searchForm", "searchForm" },
-					{ "javax.faces.ViewState", trains.JSFViewState }, // THIS IS ALTERED! TEST TEST
-					{ train.ID, train.ID }
-				};
-
-
-				if (GlobalVar.LOGS)
-				{
-					Console.WriteLine("Params of train: {0} with id: {1} is:", train.Name, train.ID);
-					foreach (KeyValuePair<string, string> list in values)
-					{
-						Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
-					}
-				}
-
-
-				Dictionary<string, string> str = await GetContigentCheckParams(await GetTrainInfo(values)); // setting params for contigent page
-
-				if (GlobalVar.LOGS)
-				{
-					foreach (KeyValuePair<string, string> list in str)
-					{
-						Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
-					}
-					Console.WriteLine("");
-				}
-
-				response = await GetContigentCheck(str); // Checking whether there are free tickets or not
-
-				if (GlobalVar.LOGS)
-				{
-					System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetContigentCheckTrain{0}.html", i), response);
-				}
-				response = await GetCart(response);
-
-				if (response == null)
-				{
-					Console.WriteLine("Train tickets are not available for train {0}", train.Name);
-					continue;
-				}
-				else
-				{
-					if (GlobalVar.LOGS)
-					{
-						System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetCartTrain{0}.html", i), response);
-					}
-					Console.WriteLine("Train tickets are available for train {0}", train.Name);
-				}
-
-				response = await EmptyCart(response);
-				if (GlobalVar.LOGS)
-				{
-					System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\EmptyCartTrain{0}.html", i), response);
-				}
-
-				System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\Train{0}.html", i), response);// 
-				i++;
-
-			}
-			Console.WriteLine("END");
-		}
-
-		static async Task<List<string>> GetStations(string from, string to, string date, string time)
-		{
-			var response = await GetZSSKInfo(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
-
-			var htmlDoc = new HtmlDocument();
-			htmlDoc.LoadHtml(response);
-
-			//trains.
-			var JSFViewState = htmlDoc.DocumentNode
-				.SelectSingleNode("//input[@name='javax.faces.ViewState']")
-				.Attributes["value"].Value;
-
-			//Trains trains = new Trains(JSFViewState);
+			////Trains trains = new Trains(JSFViewState);
 
 			//var trainsNodes = htmlDoc.DocumentNode
 			//	.SelectNodes("//tr[@class='tmp-item-line ']/td[@class='tmp-valign-top' and @colspan='3']");
@@ -365,7 +265,6 @@ namespace ZSSK_cheaper_tickets_cons
 			//foreach (var node in trainsNodes)
 			//{
 			//	Train train = new Train();
-
 			//	train.Name = node.InnerText; // get the train name
 			//	train.Name = Regex.Replace(train.Name, @"\s+", " "); // exclude spaces from train name
 
@@ -387,25 +286,134 @@ namespace ZSSK_cheaper_tickets_cons
 			//	train.ID = Regex.Match(trainNode.Attributes["onclick"].Value, patternForID).Value;
 			//	train.ID = train.ID.Remove(train.ID.Length - 1);
 
-				
+			//	var values = new Dictionary<string, string> // Clicking the specific train
+			//	{
+			//		{ "searchForm", "searchForm" },
+			//		{ "javax.faces.ViewState", trains.JSFViewState }, 
+			//		{ train.ID, train.ID }
+			//	};
+
+
+			//	if (GlobalVar.LOGS)
+			//	{
+			//		Console.WriteLine("Params of train: {0} with id: {1} is:", train.Name, train.ID);
+			//		foreach (KeyValuePair<string, string> list in values)
+			//		{
+			//			Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
+			//		}
+			//	}
+
+
+			//	Dictionary<string, string> str = await GetContigentCheckParams(await GetTrainInfo(values)); // setting params for contigent page
+
+			//	if (GlobalVar.LOGS)
+			//	{
+			//		foreach (KeyValuePair<string, string> list in str)
+			//		{
+			//			Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
+			//		}
+			//		Console.WriteLine("");
+			//	}
+
+			//	response = await GetContigentCheck(str); // Checking whether there are free tickets or not
+
+			//	if (GlobalVar.LOGS)
+			//	{
+			//		System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetContigentCheckTrain{0}.html", i), response);
+			//	}
+			//	response = await GetCart(response);
+
+			//	if (response == null)
+			//	{
+			//		Console.WriteLine("Train tickets are not available for train {0}", train.Name);
+			//		continue;
+			//	}
+			//	else
+			//	{
+			//		if (GlobalVar.LOGS)
+			//		{
+			//			System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetCartTrain{0}.html", i), response);
+			//		}
+			//		Console.WriteLine("Train tickets are available for train {0}", train.Name);
+			//	}
+
+			//	response = await EmptyCart(response);
+			//	if (GlobalVar.LOGS)
+			//	{
+			//		System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\EmptyCartTrain{0}.html", i), response);
+			//	}
+
+			//	System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\Train{0}.html", i), response);// 
+			//	i++;
+
 			//}
+			Console.WriteLine("END");
+		}
 
-			var nodes = htmlDoc.DocumentNode.SelectNodes("//*[@id='r0_train_R615']/table");
-			Train train = new Train();
+		static async Task<Trains> GetStations(string from, string to, string date, string time)
+		{
+			var response = await GetZSSKInfo(from, to, date, time);
 
-			foreach (var node in nodes)
+			var htmlDoc = new HtmlDocument();
+			htmlDoc.LoadHtml(response);
+
+			//trains.
+			var JSFViewState = htmlDoc.DocumentNode
+				.SelectSingleNode("//input[@name='javax.faces.ViewState']")
+				.Attributes["value"].Value;
+
+			Trains trains = new Trains(JSFViewState);
+
+			var trainsNodes = htmlDoc.DocumentNode
+				.SelectNodes("//tr[@class='tmp-item-line ']/td[@class='tmp-valign-top' and @colspan='3']");
+
+			if (trainsNodes == null)
 			{
-				var stationNodes = node.SelectNodes("./tbody");
+				throw new NullReferenceException("No trains were fetched.");
+			}
+
+			string patternForID = @"searchForm:inetConnection.*?:.*?:.*?'";
+
+			// going to scrape the whole structure
+			for (var k = 0; k < trainsNodes.Count; k++)
+			{
+				var node = trainsNodes[k];
+				Train train = new Train();
+
+				train.Name = node.InnerText; // get the train name
+				train.Name = Regex.Replace(train.Name, @"\s+", " "); // exclude spaces from train name
+
+				if (!Regex.IsMatch(train.Name, @"R .*")) // Checks if train is a fast train
+					continue;
+
+
+				var trainNodes = node.ParentNode.SelectSingleNode("./td[3]/div").ChildNodes; // Getting all possible *a* href links (Like Listok a miestenka, Miestenka, Listok)
+				HtmlNode trainNode = null;
+				foreach (var nodeTrain in trainNodes) // getting the last *a* element in train nodes (Get the attribute value for "Listok")    
+				{
+					if (nodeTrain.Name == "a" && nodeTrain.InnerText == "Lístok")
+					{
+						trainNode = nodeTrain;
+					}
+				}
+
+
+				train.ID = Regex.Match(trainNode.Attributes["onclick"].Value, patternForID).Value;
+				train.ID = train.ID.Remove(train.ID.Length - 1);
+
+				// Scraping stations from now on
+				var nodes = htmlDoc.DocumentNode.SelectNodes("//*[@id='r0_train_R615']/table"); // loading all the tables where stations are preserved for each train
+				var nodeHelp = nodes[k]; // same index as train If train is not a fast train it will not get here (because it skipped earlier)
+				var stationNodes = nodeHelp.SelectNodes("./tbody"); // this can be minimized
 				for (int i = 0; i < stationNodes.Count; i = i + 3)
 				{
-					string departureTime = stationNodes[i].SelectSingleNode("./tr[2]/td[4]/strong").InnerText;
+					string departureTime = stationNodes[i].SelectSingleNode("./tr[2]/td[4]/strong").InnerText; // scraping the first station
 					string name = stationNodes[i].SelectSingleNode("./tr[2]/td[2]").InnerText;
 					departureTime = Regex.Replace(departureTime, @"\s+", "");
 					Station station = new Station(name, departureTime);
+					train.AddStation(station); // end of scraping the first station
 
-					train.AddStation(station);
-
-					var otherStations = stationNodes[i + 1].SelectNodes("./tr");
+					var otherStations = stationNodes[i + 1].SelectNodes("./tr"); // scraping stations between the first and the last stations
 					for (int j = 0; j < otherStations.Count; j++)
 					{
 						name = otherStations[j].SelectSingleNode("./td[2]").InnerText;
@@ -413,9 +421,9 @@ namespace ZSSK_cheaper_tickets_cons
 						departureTime = Regex.Replace(departureTime, @"\s+", "");
 						station = new Station(name, departureTime);
 						train.AddStation(station);
-					}
+					} // end of scraping stations between the first and the last stations
 
-					if (i + 3 == stationNodes.Count)
+					if (i + 3 == stationNodes.Count) // scraping the last station
 					{
 						name = stationNodes[i + 2].SelectSingleNode("./tr[1]/td[2]").InnerText;
 						departureTime = stationNodes[i + 2].SelectSingleNode("./tr[1]/td[4]/strong").InnerText;
@@ -423,15 +431,39 @@ namespace ZSSK_cheaper_tickets_cons
 						station = new Station(name, departureTime);
 
 						train.AddStation(station);
-					}
-					
-
-
+					} // end of scraping the last station
 				}
-				var stations = train.Stations;
+				trains.AddTrain(train); // adding final train to list of trains
+			}
+			return trains;
+		}
+
+		static async Task<bool> ContigentCheckPassage(string from, string to, string date, string time, string JSFViewState, string trainID)
+		{
+			var response = await GetZSSKInfo(from, to, date, time);
+			var values = new Dictionary<string, string> // Clicking the specific train
+				{
+					{ "searchForm", "searchForm" },
+					{ "javax.faces.ViewState", JSFViewState },
+					{ trainID, trainID }
+				};
+			Dictionary<string, string> str = await GetContigentCheckParams(await GetTrainInfo(values)); // setting params for contigent page
+			response = await GetContigentCheck(str); // Checking whether there are free tickets or not
+
+			response = await GetCart(response); // now the final check comes, If null means page was unsuccessful to load so no free ticket.
+
+			if (response == null)
+			{
+				Console.WriteLine("Train tickets are not available for train going on {0} at {1} from {2} to {3}", date, time, from, to);
+				return false;
+			}
+			else
+			{
+				Console.WriteLine("Train tickets are available for train going on {0} at {1} from {2} to {3}", date, time, from, to);
 			}
 
-			return new List<string>();
+			response = await EmptyCart(response);
+			return true;
 		}
 	}
 }
