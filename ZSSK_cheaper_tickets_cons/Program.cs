@@ -34,7 +34,7 @@ namespace ZSSK_cheaper_tickets_cons
 			Console.ReadLine();
 		}
 
-		static async Task<Dictionary<string, string>> GetCartParams(string JFSViewState)
+		static Dictionary<string, string> GetCartParams(string JFSViewState)
 		{
 			var values = new Dictionary<string, string>();
 			values.Add("cartForm", "cartForm");
@@ -64,7 +64,7 @@ namespace ZSSK_cheaper_tickets_cons
 								.SelectSingleNode("//input[@name='javax.faces.ViewState']")
 								.Attributes["value"].Value;
 
-			var values = await GetCartParams(JSFViewState);
+			var values = GetCartParams(JSFViewState);
 
 			var content = new FormUrlEncodedContent(values);
 
@@ -73,7 +73,7 @@ namespace ZSSK_cheaper_tickets_cons
 			return await response.Content.ReadAsStringAsync();
 		}
 
-		static async Task<Dictionary<string, string>> EmptyCartParams(string JFSViewState)
+		static Dictionary<string, string> EmptyCartParams(string JFSViewState)
 		{
 			var values = new Dictionary<string, string>()
 			{
@@ -99,7 +99,7 @@ namespace ZSSK_cheaper_tickets_cons
 								.SelectSingleNode("//input[@name='javax.faces.ViewState']")
 								.Attributes["value"].Value;
 
-			var values = await EmptyCartParams(JSFViewState);
+			var values = EmptyCartParams(JSFViewState);
 			var content = new FormUrlEncodedContent(values);
 			var response = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/shopping/shoppingCart.xhtml", content); // got the page
 			return await response.Content.ReadAsStringAsync();
