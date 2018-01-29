@@ -26,7 +26,7 @@ namespace ZSSK_cheaper_tickets_cons
 		{
 			if (station == null)
 			{
-				throw new System.ArgumentNullException("Station is equal to null while trying to add to the train { 0}", Name);
+				throw new System.ArgumentNullException("Station is equal to null while trying to add to the train {0}", Name);
 			}
 
 			Stations.Add(station);

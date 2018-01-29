@@ -17,10 +17,10 @@ namespace ZSSK_cheaper_tickets_cons
 	public static class GlobalVar
 	{
 		public const bool LOGS = true;
-		public const string FROM = "Bratislava hl.st.";
-		public const string TO = "Margecany";
-		public const string TIME = "6:30";
-		public const string DATE = "26.1.2018";
+		public const string FROM = "Košice";
+		public const string TO = "Bratislava hl.st.";
+		public const string TIME = "19:00";
+		public const string DATE = "29.1.2018";
 	}
 
 	class Program
@@ -50,17 +50,17 @@ namespace ZSSK_cheaper_tickets_cons
 		 */
 		static async Task<String> GetCart(string page) // 
 		{
-			var htmlDoc2 = new HtmlDocument(); // remove that "2" from identifier
-			htmlDoc2.LoadHtml(page); // Loading up HTML
+			var htmlDoc = new HtmlDocument(); // remove that "2" from identifier
+			htmlDoc.LoadHtml(page); // Loading up HTML
 
-			var isInCart = htmlDoc2.DocumentNode
+			var isInCart = htmlDoc.DocumentNode
 								.SelectNodes("//div[@class='tmp-shopping-cart-total']/h2[@class='tmp-shopping-header']"); // this node has to be part of the cart page
 
 			if (isInCart == null) // If it is not (== null) then end function 
 				return null;
 
 
-			var JSFViewState = htmlDoc2.DocumentNode
+			var JSFViewState = htmlDoc.DocumentNode
 								.SelectSingleNode("//input[@name='javax.faces.ViewState']")
 								.Attributes["value"].Value;
 
@@ -75,10 +75,13 @@ namespace ZSSK_cheaper_tickets_cons
 
 		static async Task<Dictionary<string, string>> EmptyCartParams(string JFSViewState)
 		{
-			var values = new Dictionary<string, string>();
-			values.Add("shoppingCart", "shoppingCart");
-			values.Add("javax.faces.ViewState", JFSViewState);
-			values.Add("shoppingCart:j_idt96:0:j_idt103", "shoppingCart:j_idt96:0:j_idt103");
+			var values = new Dictionary<string, string>()
+			{
+				{"shoppingCart", "shoppingCart"},
+				{"javax.faces.ViewState", JFSViewState},
+				{"shoppingCart:j_idt96:0:j_idt103", "shoppingCart:j_idt96:0:j_idt103"}
+			};
+
 			return values;
 		}
 
@@ -102,8 +105,6 @@ namespace ZSSK_cheaper_tickets_cons
 			return await response.Content.ReadAsStringAsync();
 		}
 
-
-
 		static async Task<String> GetZSSKInfo(string from, string to, string date, string time)
 		{
 			var values = new Dictionary<string, string> // getting list of available trains
@@ -124,8 +125,15 @@ namespace ZSSK_cheaper_tickets_cons
 
 			var content = new FormUrlEncodedContent(values);
 
-			var response = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/connection/portal.xhtml", content); // got the page
-
+			HttpResponseMessage response = null;
+			try
+			{
+				response = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/connection/portal.xhtml", content); // got the page
+			}
+			catch
+			{
+				throw new Exception("No internet connection or some other error.");
+			}
 
 			return await response.Content.ReadAsStringAsync();
 		}
@@ -230,11 +238,46 @@ namespace ZSSK_cheaper_tickets_cons
 
 			foreach (var train in trains.GetTrains())
 			{
+				//var tasksPassages = new List<Task<bool>>();
+				//for (var i = 0; i < train.Stations.Count - 1; i++)
+				//{
+				//	tasksPassages.Add(ContigentCheckPassage(train.Stations[i].Name, train.Stations[i + 1].Name,
+				//		GlobalVar.DATE, train.Stations[i].DepartureTime, trains.JSFViewState, train.ID));
+				//}
+				//var listPassages = await Task.WhenAll(tasksPassages);
+
+
 				for (var i = 0; i < train.Stations.Count - 1; i++)
 				{
-					
-					var valueLol = await ContigentCheckPassage(train.Stations[i].Name, train.Stations[i + 1].Name,
+
+					var isFree = await ContigentCheckPassage(train.Stations[i].Name, train.Stations[i + 1].Name,
 						GlobalVar.DATE, train.Stations[i].DepartureTime, trains.JSFViewState, train.ID);
+					train.AddPassage(new Passage(train.Stations[i].Name, train.Stations[i + 1].Name, isFree));
+					//train.AddPassage(new Passage(train.Stations[i].Name, train.Stations[i + 1].Name, listPassages[i]));
+				}
+			}
+
+			foreach (var train in trains.GetTrains())
+			{
+				List<Passage> passages = new List<Passage>();
+				int i = 0;
+				while (i < train.Passages.Count)
+				{
+					int j = i + 1;
+					while ((train.Passages[j].IsFree == train.Passages[i].IsFree) && (j < train.Passages.Count - 1))
+					{
+						j++;
+					}
+					Passage passage = new Passage(train.Passages[i].From, train.Passages[j].To, train.Passages[i].IsFree);
+					i = j + 1;
+
+					passages.Add(passage);
+				}
+
+				Console.WriteLine("Train {0} has following passages:", train.Name);
+				foreach (var passage in passages)
+				{
+					Console.WriteLine("Passage from {0} to {1} is {2}", passage.From, passage.To, (passage.IsFree ? "free" : "paid"));
 				}
 			}
 			//var response = await GetZSSKInfo(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
@@ -374,6 +417,17 @@ namespace ZSSK_cheaper_tickets_cons
 
 			string patternForID = @"searchForm:inetConnection.*?:.*?:.*?'";
 
+			// getting ready for scraping stations
+			var nodesOfStations = htmlDoc.DocumentNode.SelectNodes("//*[@id='r0_train_R615']/table"); // loading all the tables where stations are preserved for each train
+
+			HtmlNode stationNode = null;
+			for (int i = 0; i < nodesOfStations.Count; i++)
+			{
+				stationNode = nodesOfStations[i];
+				if (stationNode.ParentNode.ParentNode.ParentNode.Attributes["class"].Value.Contains("ic"))
+					nodesOfStations.Remove(stationNode);
+			}
+
 			// going to scrape the whole structure
 			for (var k = 0; k < trainsNodes.Count; k++)
 			{
@@ -386,8 +440,19 @@ namespace ZSSK_cheaper_tickets_cons
 				if (!Regex.IsMatch(train.Name, @"R .*")) // Checks if train is a fast train
 					continue;
 
-
-				var trainNodes = node.ParentNode.SelectSingleNode("./td[3]/div").ChildNodes; // Getting all possible *a* href links (Like Listok a miestenka, Miestenka, Listok)
+				HtmlNodeCollection trainNodes = null;
+				try
+				{
+					trainNodes = node.ParentNode.SelectSingleNode("./td[3]/div").ChildNodes; // Getting all possible *a* href links (Like Listok a miestenka, Miestenka, Listok)
+				}
+				catch
+				{
+					if (GlobalVar.LOGS)
+					{
+						Console.WriteLine("In train {0} href link for buying tickets couldn't be found", train.Name);
+					}
+					continue;
+				}
 				HtmlNode trainNode = null;
 				foreach (var nodeTrain in trainNodes) // getting the last *a* element in train nodes (Get the attribute value for "Listok")    
 				{
@@ -397,13 +462,19 @@ namespace ZSSK_cheaper_tickets_cons
 					}
 				}
 
+				if (trainNode == null) // it means there was no button "Listok"
+				{
+					continue;
+				}
+
 
 				train.ID = Regex.Match(trainNode.Attributes["onclick"].Value, patternForID).Value;
 				train.ID = train.ID.Remove(train.ID.Length - 1);
 
 				// Scraping stations from now on
-				var nodes = htmlDoc.DocumentNode.SelectNodes("//*[@id='r0_train_R615']/table"); // loading all the tables where stations are preserved for each train
-				var nodeHelp = nodes[k]; // same index as train If train is not a fast train it will not get here (because it skipped earlier)
+
+				var nodeHelp = nodesOfStations[k]; // same index as train If train is not a fast train it will not get here (because it skipped earlier)
+
 				var stationNodes = nodeHelp.SelectNodes("./tbody"); // this can be minimized
 				for (int i = 0; i < stationNodes.Count; i = i + 3)
 				{
@@ -414,14 +485,17 @@ namespace ZSSK_cheaper_tickets_cons
 					train.AddStation(station); // end of scraping the first station
 
 					var otherStations = stationNodes[i + 1].SelectNodes("./tr"); // scraping stations between the first and the last stations
-					for (int j = 0; j < otherStations.Count; j++)
+					if (otherStations != null)
 					{
-						name = otherStations[j].SelectSingleNode("./td[2]").InnerText;
-						departureTime = otherStations[j].SelectSingleNode("./td[4]/strong[2]").InnerText;
-						departureTime = Regex.Replace(departureTime, @"\s+", "");
-						station = new Station(name, departureTime);
-						train.AddStation(station);
-					} // end of scraping stations between the first and the last stations
+						for (int j = 0; j < otherStations.Count; j++)
+						{
+							name = otherStations[j].SelectSingleNode("./td[2]").InnerText;
+							departureTime = otherStations[j].SelectSingleNode("./td[4]/strong[2]").InnerText;
+							departureTime = Regex.Replace(departureTime, @"\s+", "");
+							station = new Station(name, departureTime);
+							train.AddStation(station);
+						} // end of scraping stations between the first and the last stations
+					}
 
 					if (i + 3 == stationNodes.Count) // scraping the last station
 					{
