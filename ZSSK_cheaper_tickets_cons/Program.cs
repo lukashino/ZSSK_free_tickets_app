@@ -20,7 +20,7 @@ namespace ZSSK_cheaper_tickets_cons
 		public const string FROM = "Košice";
 		public const string TO = "Bratislava hl.st.";
 		public const string TIME = "19:00";
-		public const string DATE = "29.1.2018";
+		public const string DATE = "1.2.2018";
 	}
 
 	class Program
@@ -246,6 +246,10 @@ namespace ZSSK_cheaper_tickets_cons
 				//}
 				//var listPassages = await Task.WhenAll(tasksPassages);
 
+				//for (var i = 0; i < train.Stations.Count - 1; i++)
+				//{
+				//	train.AddPassage(new Passage(train.Stations[i].Name, train.Stations[i + 1].Name, listPassages[i]));
+				//}
 
 				for (var i = 0; i < train.Stations.Count - 1; i++)
 				{
@@ -253,7 +257,6 @@ namespace ZSSK_cheaper_tickets_cons
 					var isFree = await ContigentCheckPassage(train.Stations[i].Name, train.Stations[i + 1].Name,
 						GlobalVar.DATE, train.Stations[i].DepartureTime, trains.JSFViewState, train.ID);
 					train.AddPassage(new Passage(train.Stations[i].Name, train.Stations[i + 1].Name, isFree));
-					//train.AddPassage(new Passage(train.Stations[i].Name, train.Stations[i + 1].Name, listPassages[i]));
 				}
 			}
 
@@ -280,116 +283,6 @@ namespace ZSSK_cheaper_tickets_cons
 					Console.WriteLine("Passage from {0} to {1} is {2}", passage.From, passage.To, (passage.IsFree ? "free" : "paid"));
 				}
 			}
-			//var response = await GetZSSKInfo(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
-
-			//var htmlDoc = new HtmlDocument();
-			//htmlDoc.LoadHtml(response);
-
-			//if (GlobalVar.LOGS)
-			//{
-			//	System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetZSSKInfo.html"), response);
-			//}
-
-			//var JSFViewState = htmlDoc.DocumentNode
-			//	.SelectSingleNode("//input[@name='javax.faces.ViewState']")
-			//	.Attributes["value"].Value;
-
-			////Trains trains = new Trains(JSFViewState);
-
-			//var trainsNodes = htmlDoc.DocumentNode
-			//	.SelectNodes("//tr[@class='tmp-item-line ']/td[@class='tmp-valign-top' and @colspan='3']");
-			//if (trainsNodes == null)
-			//{
-			//	throw new NullReferenceException("No trains were fetched.");
-			//}
-
-			//int i = 0;
-			//string patternForID = @"searchForm:inetConnection.*?:.*?:.*?'";
-			//foreach (var node in trainsNodes)
-			//{
-			//	Train train = new Train();
-			//	train.Name = node.InnerText; // get the train name
-			//	train.Name = Regex.Replace(train.Name, @"\s+", " "); // exclude spaces from train name
-
-			//	if (!Regex.IsMatch(train.Name, @"R .*")) // Checks if train is a fast train
-			//		continue;
-
-
-			//	var trainNodes = node.ParentNode.SelectSingleNode("./td[3]/div").ChildNodes; // Getting all possible *a* href links (Like Listok a miestenka, Miestenka, Listok)
-			//	HtmlNode trainNode = null;
-			//	foreach (var nodeTrain in trainNodes) // getting the last *a* element in train nodes (Get the attribute value for "Listok")    
-			//	{
-			//		if (nodeTrain.Name == "a" && nodeTrain.InnerText == "Lístok")
-			//		{
-			//			trainNode = nodeTrain;
-			//		}
-			//	}
-
-
-			//	train.ID = Regex.Match(trainNode.Attributes["onclick"].Value, patternForID).Value;
-			//	train.ID = train.ID.Remove(train.ID.Length - 1);
-
-			//	var values = new Dictionary<string, string> // Clicking the specific train
-			//	{
-			//		{ "searchForm", "searchForm" },
-			//		{ "javax.faces.ViewState", trains.JSFViewState }, 
-			//		{ train.ID, train.ID }
-			//	};
-
-
-			//	if (GlobalVar.LOGS)
-			//	{
-			//		Console.WriteLine("Params of train: {0} with id: {1} is:", train.Name, train.ID);
-			//		foreach (KeyValuePair<string, string> list in values)
-			//		{
-			//			Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
-			//		}
-			//	}
-
-
-			//	Dictionary<string, string> str = await GetContigentCheckParams(await GetTrainInfo(values)); // setting params for contigent page
-
-			//	if (GlobalVar.LOGS)
-			//	{
-			//		foreach (KeyValuePair<string, string> list in str)
-			//		{
-			//			Console.WriteLine(string.Format("Key = {0}, Value = {1}", list.Key, list.Value));
-			//		}
-			//		Console.WriteLine("");
-			//	}
-
-			//	response = await GetContigentCheck(str); // Checking whether there are free tickets or not
-
-			//	if (GlobalVar.LOGS)
-			//	{
-			//		System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetContigentCheckTrain{0}.html", i), response);
-			//	}
-			//	response = await GetCart(response);
-
-			//	if (response == null)
-			//	{
-			//		Console.WriteLine("Train tickets are not available for train {0}", train.Name);
-			//		continue;
-			//	}
-			//	else
-			//	{
-			//		if (GlobalVar.LOGS)
-			//		{
-			//			System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\GetCartTrain{0}.html", i), response);
-			//		}
-			//		Console.WriteLine("Train tickets are available for train {0}", train.Name);
-			//	}
-
-			//	response = await EmptyCart(response);
-			//	if (GlobalVar.LOGS)
-			//	{
-			//		System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\EmptyCartTrain{0}.html", i), response);
-			//	}
-
-			//	System.IO.File.WriteAllText(string.Format(@"C:\Users\Lukas\Desktop\scr\Train{0}.html", i), response);// 
-			//	i++;
-
-			//}
 			Console.WriteLine("END");
 		}
 
