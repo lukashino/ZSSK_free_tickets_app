@@ -17,10 +17,10 @@ namespace ZSSK_cheaper_tickets_cons
 	public static class GlobalVar
 	{
 		public const bool LOGS = true;
-		public const string FROM = "Košice";
-		public const string TO = "Bratislava hl.st.";
-		public const string TIME = "19:00";
-		public const string DATE = "1.2.2018";
+		public const string FROM = "Bratislava hl.st.";
+		public const string TO = "Žilina";
+		public const string TIME = "8:00";
+		public const string DATE = "5.2.2018";
 	}
 
 	class Program
@@ -29,7 +29,17 @@ namespace ZSSK_cheaper_tickets_cons
 		private static readonly HttpClient client = new HttpClient(handler);
 		static void Main(string[] args)
 		{
-
+			client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+			client.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br");
+			client.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.5");
+			client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:58.0) Gecko/20100101 Firefox/58.0");
+			//client.DefaultRequestHeaders.Add("", "");
+			//client.DefaultRequestHeaders.Add("", "");
+			//client.DefaultRequestHeaders.Add("", "");
+			//client.DefaultRequestHeaders.Add("", "");
+			//client.DefaultRequestHeaders.Add("", "");
+			//client.DefaultRequestHeaders.Add("", "");
+			//client.DefaultRequestHeaders.Add("", "");
 			RunAsync().Wait();
 			Console.ReadLine();
 		}
@@ -50,7 +60,7 @@ namespace ZSSK_cheaper_tickets_cons
 		 */
 		static async Task<String> GetCart(string page) // 
 		{
-			var htmlDoc = new HtmlDocument(); // remove that "2" from identifier
+			var htmlDoc = new HtmlDocument(); 
 			htmlDoc.LoadHtml(page); // Loading up HTML
 
 			var isInCart = htmlDoc.DocumentNode
@@ -65,12 +75,10 @@ namespace ZSSK_cheaper_tickets_cons
 								.Attributes["value"].Value;
 
 			var values = GetCartParams(JSFViewState);
-
 			var content = new FormUrlEncodedContent(values);
-
 			var response = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/shopping/personalData.xhtml", content); // got the page
-
-			return await response.Content.ReadAsStringAsync();
+			var cartPage = await response.Content.ReadAsStringAsync();
+			return cartPage;
 		}
 
 		static Dictionary<string, string> EmptyCartParams(string JFSViewState)
@@ -117,7 +125,7 @@ namespace ZSSK_cheaper_tickets_cons
 					{ "date", date },
 					{ "time", time },
 					{ "departure", "true" },
-					{ "wlw-checkbox_key%3A%7BpageFlow.inputParam.paramItemParams.direct.valueBoolean%7DOldValue", "false" },
+					{ "wlw-checkbox_key:{pageFlow.inputParam.paramItemParams.direct.valueBoolean}OldValue", "false" },
 					{ "maxChangeTrainCount", "5" },
 					{ "minChangeTrainTime", "2" },
 					{ "bed", "0" }
@@ -141,23 +149,17 @@ namespace ZSSK_cheaper_tickets_cons
 		static async Task<String> GetTrainInfo(Dictionary<string, string> values) // fetching specific train page
 		{
 			var content = new FormUrlEncodedContent(values);
-
 			var trainResponse = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/connection/search.xhtml", content);
-
-			var trainPage = trainResponse.Content.ReadAsStringAsync();
-
-			return await trainPage;
+			var trainPage = await trainResponse.Content.ReadAsStringAsync();
+			return trainPage;
 		}
 
 		static async Task<String> GetContigentCheckChangePage(Dictionary<string, string> values)
 		{
 			var content = new FormUrlEncodedContent(values);
-
 			var trainResponse = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/shopping/ticketVCD.xhtml", content);
-
-			var trainPage = trainResponse.Content.ReadAsStringAsync();
-
-			return await trainPage;
+			var trainPage = await trainResponse.Content.ReadAsStringAsync();
+			return trainPage;
 		}
 
 		static async Task<Dictionary<string, string>> GetContigentCheckParams(string trainPage)
@@ -192,9 +194,9 @@ namespace ZSSK_cheaper_tickets_cons
 			var page = await GetContigentCheckChangePage(changeParams); // should internally change type of passenger to student (for free)
 			htmlDoc.LoadHtml(page);
 
-			JSFViewState = htmlDoc.DocumentNode
-				.SelectSingleNode("//input[@name='javax.faces.ViewState']")
-				.Attributes["value"].Value;
+			//JSFViewState = htmlDoc.DocumentNode
+			//	.SelectSingleNode("//input[@name='javax.faces.ViewState']")
+			//	.Attributes["value"].Value;
 
 
 			ticketPassenger = htmlDoc.DocumentNode
@@ -218,12 +220,35 @@ namespace ZSSK_cheaper_tickets_cons
 		static async Task<String> GetContigentCheck(Dictionary<string, string> values)
 		{
 			var content = new FormUrlEncodedContent(values);
-
 			var trainResponse = await client.PostAsync("https://ikvc.slovakrail.sk/inet-sales-web/pages/shopping/ticketVCD.xhtml", content);
+			var trainPage = await trainResponse.Content.ReadAsStringAsync();
+			return trainPage;
+		}
 
-			var trainPage = trainResponse.Content.ReadAsStringAsync();
+		static async Task FreePassages(Train train, int min, int max, string JSFViewState) // min = 0, max = 5 / min1 = 0, max1 = 2; min2 = 2; max2 = 5
+		{
+			if (train == null)
+				throw new SystemException("Train is null object in function FreePassages");
+			if (min > max)
+				throw new ArgumentException("Min can't be larger than max");
 
-			return await trainPage;
+			var isFree = await ContigentCheckPassage(train.Stations[min].Name, train.Stations[max].Name,
+						GlobalVar.DATE, train.Stations[min].DepartureTime, JSFViewState, train.ID);
+
+			if (isFree)
+			{
+				train.AddPassage(new Passage(train.Stations[min].Name, train.Stations[max].Name, true)); // passage for free
+				return;
+			}
+
+			else if ((max - min) > 1)
+			{
+				await FreePassages(train, min, (max + min) / 2, JSFViewState);
+				await FreePassages(train, (max + min) / 2, max, JSFViewState);
+				return;
+			}
+			train.AddPassage(new Passage(train.Stations[min].Name, train.Stations[max].Name, false)); // paid passage
+			return;
 		}
 
 
@@ -232,9 +257,6 @@ namespace ZSSK_cheaper_tickets_cons
 		static async Task RunAsync()
 		{
 			Trains trains = await GetStations(GlobalVar.FROM, GlobalVar.TO, GlobalVar.DATE, GlobalVar.TIME);
-
-
-
 
 			foreach (var train in trains.GetTrains())
 			{
@@ -251,6 +273,8 @@ namespace ZSSK_cheaper_tickets_cons
 				//	train.AddPassage(new Passage(train.Stations[i].Name, train.Stations[i + 1].Name, listPassages[i]));
 				//}
 
+
+				//WORKING CONCEPT
 				for (var i = 0; i < train.Stations.Count - 1; i++)
 				{
 
@@ -258,6 +282,13 @@ namespace ZSSK_cheaper_tickets_cons
 						GlobalVar.DATE, train.Stations[i].DepartureTime, trains.JSFViewState, train.ID);
 					train.AddPassage(new Passage(train.Stations[i].Name, train.Stations[i + 1].Name, isFree));
 				}
+
+				//var min = 0;
+				//var max = (train.Stations.Count - 1);
+				//await FreePassages(train, min, max, trains.JSFViewState);
+
+
+				// node left right
 			}
 
 			foreach (var train in trains.GetTrains())
@@ -266,15 +297,24 @@ namespace ZSSK_cheaper_tickets_cons
 				int i = 0;
 				while (i < train.Passages.Count)
 				{
+					if (train.Passages.Count == 1)
+					{
+						passages.Add(new Passage(train.Passages[0].From, train.Passages[0].To, train.Passages[0].IsFree));
+						break;
+					}
 					int j = i + 1;
-					while ((train.Passages[j].IsFree == train.Passages[i].IsFree) && (j < train.Passages.Count - 1))
+					while ((j < train.Passages.Count - 1) && (train.Passages[j].IsFree == train.Passages[i].IsFree))
 					{
 						j++;
 					}
-					Passage passage = new Passage(train.Passages[i].From, train.Passages[j].To, train.Passages[i].IsFree);
+
+					if (j > train.Passages.Count - 1) // teeth grinding
+						j = train.Passages.Count - 1;
+					//j--;
+					Passage passage = new Passage(train.Passages[i].From, train.Passages[i].To, train.Passages[i].IsFree);
+					passages.Add(passage);
 					i = j + 1;
 
-					passages.Add(passage);
 				}
 
 				Console.WriteLine("Train {0} has following passages:", train.Name);
@@ -408,11 +448,20 @@ namespace ZSSK_cheaper_tickets_cons
 		static async Task<bool> ContigentCheckPassage(string from, string to, string date, string time, string JSFViewState, string trainID)
 		{
 			var response = await GetZSSKInfo(from, to, date, time);
+
+			var htmlDoc = new HtmlDocument();
+			htmlDoc.LoadHtml(response);
+
+			//trains.
+			var JSFViewState2 = htmlDoc.DocumentNode
+				.SelectSingleNode("//input[@name='javax.faces.ViewState']")
+				.Attributes["value"].Value;
+
 			var values = new Dictionary<string, string> // Clicking the specific train
 				{
 					{ "searchForm", "searchForm" },
-					{ "javax.faces.ViewState", JSFViewState },
-					{ trainID, trainID }
+					{ "javax.faces.ViewState", JSFViewState2 },
+					{ "searchForm:inetConnection_:0:j_idt380", "searchForm:inetConnection_:0:j_idt380" } // train ID of the first train
 				};
 			Dictionary<string, string> str = await GetContigentCheckParams(await GetTrainInfo(values)); // setting params for contigent page
 			response = await GetContigentCheck(str); // Checking whether there are free tickets or not
